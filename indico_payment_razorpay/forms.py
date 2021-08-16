@@ -7,7 +7,7 @@
 
 import re
 
-from wtforms.fields import StringField,DecimalField
+from wtforms.fields import StringField,IntegerField
 from wtforms.fields.html5 import URLField
 from wtforms.validators import DataRequired, Email, Length, Optional, ValidationError
 
@@ -15,7 +15,7 @@ from indico.modules.events.payment import PaymentEventSettingsFormBase, PaymentP
 from indico.web.forms.fields import IndicoPasswordField
 from indico.web.forms.validators import IndicoRegexp
 
-from indico_payment_sixpay import _
+from indico_payment_razorpay import _
 
 
 # XXX: Maybe this could be refactored to use the standard indico Placeholder system?
@@ -91,10 +91,10 @@ class FormatField:
 class PluginSettingsForm(PaymentPluginSettingsFormBase):
     """Configuration form for the Plugin across all events."""
 
-    markup = DecimalField(
+    markup = IntegerField(
         label=_('Payment Gateway Markup'),
         validators=[DataRequired()],
-        description=_('increase the final amount by this % to factor in Razorpay markup ')
+        description=_('increase the final amount by specified percentage amount to factor in Razorpay markup. 1% = 1000 ')
     )
     username = StringField(
         label=_('API Key ID'),
@@ -123,6 +123,16 @@ class PluginSettingsForm(PaymentPluginSettingsFormBase):
             'Supported placeholders: {}'
         ).format(', '.join(f'{{{p}}}' for p in FormatField.default_field_map))
     )
+    order_identifier = StringField(
+        label=_('Order Identifier'),
+        validators=[DataRequired(), FormatField(max_length=80)],
+        description=_(
+            'The default description of each order in a human readable way. '
+            'It is presented to the registrant during the transaction with Saferpay. '
+            'Event managers will be able to override this. '
+            'Supported placeholders: {}'
+        ).format(', '.join(f'{{{p}}}' for p in FormatField.default_field_map))
+    )
     notification_mail = StringField(
         label=_('Notification Email'),
         validators=[Optional(), Email(), Length(0, 50)],
@@ -133,3 +143,31 @@ class PluginSettingsForm(PaymentPluginSettingsFormBase):
         )
     )
 
+class EventSettingsForm(PaymentEventSettingsFormBase):
+    """Configuration form for the plugin for a specific event."""
+
+    order_description = StringField(
+        label=_('Order Description'),
+        validators=[DataRequired(), FormatField(max_length=80)],
+        description=_(
+            'The description of each order in a human readable way. '
+            'It is presented to the registrant during the transaction with Saferpay. '
+            'Supported placeholders: {}'
+        ).format(', '.join(f'{{{p}}}' for p in FormatField.default_field_map))
+    )
+    order_identifier = StringField(
+        label=_('Order Identifier'),
+        validators=[DataRequired(), FormatField(max_length=80, id_safe=True)],
+        description=_(
+            'The default identifier of each order for further processing. '
+            'Supported placeholders: {}'
+        ).format(', '.join(f'{{{p}}}' for p in FormatField.id_safe_field_map))
+    )
+    notification_mail = StringField(
+        label=_('Notification Email'),
+        validators=[DataRequired(), Email(), Length(0, 50)],
+        description=_(
+            'Email address to receive notifications of transactions. '
+            "This is independent of Indico's own payment notifications."
+        )
+    )

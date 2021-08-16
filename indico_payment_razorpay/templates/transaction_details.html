@@ -2,8 +2,8 @@
 {% block details %}
     {% if transaction.data.Transaction %}
         <dt>{% trans %}Transaction ID{% endtrans %}</dt>
-        <dd>{{ transaction.data.Transaction.Id }}</dd>
+        <dd>{{ transaction.data.Transaction.razorpay_payment_id }}</dd>
         <dt>{% trans %}Order ID{% endtrans %}</dt>
-        <dd>{{ transaction.data.Transaction.OrderId }}</dd>
+        <dd>{{ transaction.data.order.id }}</dd>
     {% endif %}
 {% endblock %}

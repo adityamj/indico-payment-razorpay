@@ -26,8 +26,9 @@ from indico.web.rh import RH
 from indico_payment_razorpay import _
 from indico_payment_razorpay.plugin import RazorpayPaymentPlugin
 import razorpay
-
+from razorpay.errors import SignatureVerificationError
 from indico_payment_razorpay.util import PROVIDER_RAZORPAY, to_large_currency, to_small_currency
+
 class TransactionFailure(Exception):
     """A transaction with Razorpay failed.
 
@@ -77,25 +78,34 @@ class RHInitRazorpayPayment(RHPaymentBase):
             'user_email': self.registration.email,
             'currency': self.registration.currency,
             'org_name': settings['org_name'],
+            'url':url_for_plugin('payment_razorpay.capture',self.registration.locator.uuid, _external=True),
+            'transaction':self.registration.transaction,
         }
         order_description = settings['order_description'].format(**format_map)
         order_identifier = settings['order_identifier'].format(**format_map)
-
         markup = settings['markup']
+        marked_up_amount = self.registration.price
+        marked_up_amount += (self.registration.price * markup) / 100000
         transaction_parameters = {k:v for k,v in format_map.items()}
         transaction_parameters['order_description'] = order_description
         transaction_parameters['order_identifier'] = order_identifier
         transaction_parameters['amount'] = self.registration.price
-        transaction_parameters['rzp_amount'] = self.registration.price * markup / 100
-        transaction_parameters['rzp_int_amount'] = to_small_currency(transcation_parameters['rzp_amount'],  self.registration.currency)
+        transaction_parameters['rzp_amount'] = marked_up_amount
+        transaction_parameters['rzp_int_amount'] = to_small_currency(marked_up_amount,  self.registration.currency)
         transaction_parameters['rzp_api_id'] = settings['username']
         #'NotifyUrl': url_for_plugin('payment_razorpay.notify', self.registration.locator.uuid, _external=True)
         return transaction_parameters
 
     def _init_payment_page(self, transaction_data):
         """Initialize payment page."""
+        payload = {
+            "amount":transaction_data['rzp_int_amount'],
+            "currency":self.registration.currency,
+            "notes":{'order_identifier':transaction_data['order_identifier']
+            }
+        }
         try:
-            resp = self.client.order.create(amount=transaction_data['rzp_int_amount'],currency=self.registration.currency,notes={'order_identifier':transaction_data['order_identifier']})
+            resp = self.client.order.create(data=payload)
         except RequestException as exc:
             RazorpayPaymentPlugin.logger.error('Could not initialize payment: %s', exc.response.text)
             raise Exception('Could not initialize payment')
@@ -103,6 +113,8 @@ class RHInitRazorpayPayment(RHPaymentBase):
 
     def _process_args(self):
         RHPaymentBase._process_args(self)
+        credentials = (RazorpayPaymentPlugin.settings.get('username'), RazorpayPaymentPlugin.settings.get('password'))
+        self.client = razorpay.Client(auth=credentials)
         if 'razorpay' not in get_active_payment_plugins(self.event):
             raise NotFound
         if not RazorpayPaymentPlugin.instance.supports_currency(self.registration.currency):
@@ -122,13 +134,13 @@ class RHInitRazorpayPayment(RHPaymentBase):
             {'order': rzp_order,
              'rzp_int_amount':transaction_params['rzp_int_amount']}
         )
-        transaction_params['order_id'] = {'order': rzp_order,
-             'rzp_int_amount':transaction_params['rzp_int_amount']}
+        transaction_params['order_id'] = rzp_order['id']
         if not new_indico_txn:
             # set it on the current transaction if we could not create a next one
             # this happens if we already have a pending transaction and it's incredibly
             # ugly...
-            self.registration.transaction.data = rzp_order
+            self.registration.transaction.data = {'order': rzp_order,
+             'rzp_int_amount':transaction_params['rzp_int_amount']}
         return  render_plugin_template('checkout.html',**transaction_params)
 
 
@@ -138,8 +150,9 @@ class RHCaptureRazorpayPayment(RHRazorpayBase):
     def _process(self):
         """Process the reply from Razorpay about the transaction."""
 
-        RHPaymentBase._process_args(self)
+        self._process_args()
         self._process_confirmation()
+        return redirect(url_for('event_registration.display_regform', self.registration.locator.uuid, _external=True))
 
     def _process_confirmation(self):
         """Process the confirmation response inside indico."""
@@ -148,9 +161,8 @@ class RHCaptureRazorpayPayment(RHRazorpayBase):
             self._verify_payment()
             if self._is_duplicate_transaction():
                 # we have already handled the transaction
-                return
+                return redirect(url_for('event_registration.display_regform', self.registration.locator.registrant))
             if not self._is_authorized():
-
                 RazorpayPaymentPlugin.logger.info('Razorpay Transaction not Authorized yet')
                 raise TransactionFailure(step='Authorization')
             else:
@@ -166,20 +178,37 @@ class RHCaptureRazorpayPayment(RHRazorpayBase):
                 # only used for manual transactions)
                 TransactionAction.reject,
                 provider=PROVIDER_RAZORPAY,
+            data={'order': self.order,
+                  'rzp_int_amount':self.registration.transaction.data['rzp_int_amount'],}
             )
-        flash(_('Yout payment has failed .'), 'info')
-        return redirect(url_for('event_registration.display_regform', self.registration.locator.registrant))
+            flash(_('Yout payment has failed .'), 'info')
+            return
+        RazorpayPaymentPlugin.logger.info("{} completed, redirecting user now".format(self.order['id']))
+        flash(_('Yout payment was successful.'), 'info')
+        return
+
+    def _is_authorized(self):
+        payment_id = self.rzp_payment['razorpay_payment_id']
+        order_obj = self.client.payment.fetch(payment_id)
+        if order_obj['status'] != 'authorized':
+            raise TransactionFailure('authorization')
+        return True
+
     def _verify_payment(self):
 
         payload = {}
         payload['razorpay_order_id'] = self.order['id']
         payload['razorpay_payment_id'] = request.form.get('razorpay_payment_id')
         payload['razorpay_signature'] = request.form.get('razorpay_signature')
+        RazorpayPaymentPlugin.logger.warn('Razorpay Transaction Post Received {}',format(str(payload)))
         self.rzp_payment = payload
-        client.utility.verify_payment_signature(payload)
+        try:
+            self.client.utility.verify_payment_signature(payload)
+        except SignatureVerificationError as exc:
+            raise TransactionFailure('Verification')
         return True
 
-    def _is_duplicate_transaction(self, transaction_data):
+    def _is_duplicate_transaction(self):
         """Check if this transaction has already been recorded."""
         prev_transaction = self.registration.transaction
         if (
@@ -199,12 +228,14 @@ class RHCaptureRazorpayPayment(RHRazorpayBase):
         """
         payment_id = self.rzp_payment['razorpay_payment_id']
         payment_amount = self.registration.transaction.data['rzp_int_amount']
-        resp = client.payment.capture(payment_id, payment_amount, {"currency":self.registration.transaction.currency})
+        resp = self.client.payment.capture(payment_id, payment_amount, {"currency":self.registration.transaction.currency})
+        RazorpayPaymentPlugin.logger.info(str(resp))
         if 'error' in resp:
             raise TransactionFailure(step='capture')
+        RazorpayPaymentPlugin.logger.info("Payment ID {} Captured".format(payment_id))
         return
 
-    def _register_payment(self, assert_data):
+    def _register_payment(self):
         """Register the transaction as paid."""
         register_transaction(
             self.registration,
@@ -212,7 +243,8 @@ class RHCaptureRazorpayPayment(RHRazorpayBase):
             self.registration.transaction.currency,
             TransactionAction.complete,
             PROVIDER_RAZORPAY,
-            data={'order': rzp_order,
-                  'rzp_int_amount':transaction_params['rzp_int_amount'],
+            data={'order': self.order,
+                  'rzp_int_amount':self.registration.transaction.data['rzp_int_amount'],
                   'Transaction':self.rzp_payment}
         )
+        RazorpayPaymentPlugin.logger.info("{} registered".format(self.order['id']))

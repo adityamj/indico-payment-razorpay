@@ -7,8 +7,7 @@
 
 from indico.core.plugins import IndicoPluginBlueprint
 
-from indico_payment_razorpay.controllers import (RHInitRazorpayPayment, RazorpayNotificationHandler, UserCancelHandler,
-                                               UserFailureHandler, UserSuccessHandler)
+from indico_payment_razorpay.controllers import (RHInitRazorpayPayment, RHCaptureRazorpayPayment)
 
 
 blueprint = IndicoPluginBlueprint(
@@ -16,5 +15,5 @@ blueprint = IndicoPluginBlueprint(
     url_prefix='/event/<int:event_id>/registrations/<int:reg_form_id>/payment/razorpay'
 )
 
-blueprint.add_url_rule('/init', 'init', RHInitRazorpayPayment, methods=('GET', 'POST'))
-blueprint.add_url_rule('/capture', 'capture', RHCaptureRazorpayPayment, methods=('POST'))
+blueprint.add_url_rule('/init', 'init', RHInitRazorpayPayment, methods=['GET'])
+blueprint.add_url_rule('/capture', 'capture', RHCaptureRazorpayPayment, methods=['POST'])

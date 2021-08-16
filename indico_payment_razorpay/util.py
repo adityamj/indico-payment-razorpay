@@ -26,7 +26,7 @@ def validate_currency(iso_code):
     :param iso_code: an ISO4217 currency code, e.g. ``"EUR"``
     :raises: :py:exc:`~.HTTPNotImplemented` if the currency is not valid
     """
-    if iso_code in ACCEPTED_CURRENCY:
+    if iso_code not in ACCEPTED_CURRENCY:
         raise HTTPNotImplemented(
             _("Unsupported currency '{}' for Razorpay. Please contact the organizers").format(iso_code)
         )
