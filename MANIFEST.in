@@ -1,0 +1,4 @@
+graft indico_payment_razorpay/templates
+graft indico_payment_razorpay/translations
+
+global-exclude *.pyc __pycache__ .keep
