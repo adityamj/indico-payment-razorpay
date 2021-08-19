@@ -1,36 +1,36 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Payment Form</title>
+    <title>Pay with Razorpay</title>
   </head>
-  <body>
-      <p>Please click "Pay with Razorpay to make the payment"</p>
-      <p>Please note the transaction ID for future reference.</p>
-      <p>Do Not Refresh the Page</p>
-    <dl class="i-data-list">
-      <dt>{% trans %}Name{% endtrans %}</dt>
-      <dd>{{ user_name }}</dd>
-      <dt>{% trans %}Total amount{% endtrans %}</dt>
-      <dd>{{ format_currency(rzp_amount, currency, locale=session.lang) }}</dd>
-      <dt>{% trans %}Transaction ID{% endtrans %}</dt>
-      <dd>{{ order_id }}</dd>
-      <dt></dt><form action="{{url}}" method="POST">
-<script
-    src="https://checkout.razorpay.com/v1/checkout.js"
-    data-key="{{rzp_api_id}}"
-    data-amount="{{rzp_int_amount}}"
-    data-currency="{{currency}}"
-    data-order_id="{{order_id}}"
-    data-buttontext="Pay with Razorpay"
-    data-name="{{org_name}}"
-    data-description="{{order_description}}"
-    data-prefill.name="{{user_name}}"
-    data-prefill.email="{{user_email}}"
-    data-theme.color="#F37254"
-></script>
-<input type="hidden" custom="Hidden Element" name="hidden">
-</form>
-      </dd>
-    </dl>
+  <body >
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+var options = {
+    "key": "{{ rzp_api_id  }}",
+    "amount": "{{ rzp_int_amount }}",
+    "currency": "{{ currency }}",
+    "name": "{{ org_name  }}",
+    "description": "{{ order_description }}",
+    "order_id": "{{ order_id }}",
+    "callback_url": "{{ url }}",
+    "prefill": {
+        "name": "{{ user_name }}",
+        "email": "{{ user_email }}",
+    },
+    "notes": {
+        "address": "Razorpay Corporate Office"
+    },
+    "theme": {
+        "color": "#1a64a0"
+    }
+};
+var rzp1 = new Razorpay(options);
+
+window.onload = function (e){
+    rzp1.open();
+    e.preventDefault();
+}
+</script>
   </body>
 </html>
