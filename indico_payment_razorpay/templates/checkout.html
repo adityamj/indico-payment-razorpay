@@ -23,7 +23,12 @@ var options = {
     },
     "theme": {
         "color": "#1a64a0"
-    }
+    },
+    "redirect": true,
+     "retry":{
+         "enabled": false,
+         "max_count": 2
+     }
 };
 var rzp1 = new Razorpay(options);
 
