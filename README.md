@@ -16,7 +16,4 @@ they are automatically sent back to Indico.
 
 ## Credits
 
-This plugin is based on [Indico SIXPay payment plugin](https://github.com/indico/indico-plugins/tree/master/payment_sixpay) which was 
-Originally developed by Max Fischer for Indico 1.2 and 2.x. Updated to use the
-latest SIXPay API by Martin Claus. Adapted to Indico 3.0 and Python 3 by the
-CERN Indico Team.
+This plugin is based on [Indico SIXPay payment plugin](https://github.com/indico/indico-plugins/tree/master/payment_sixpay).
